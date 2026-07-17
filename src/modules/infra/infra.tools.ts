@@ -1,0 +1,313 @@
+import { ToolDecorator as Tool, Widget } from '@nitrostack/core';
+import { z } from 'zod';
+
+import { readExistingInfrastructure } from '../../tools/tfReader';
+import { readCompanyPolicies } from '../../tools/policyReader';
+import { getCloudPricing } from '../../tools/pricingLookup';
+import { estimateResourceRequirements } from '../../tools/resourceEstimator';
+import { generateCandidateArchitectures } from '../../tools/candidateGenerator';
+import { compareArchitectures } from '../../tools/architectureComparer';
+import { generateTerraform } from '../../tools/terraformGenerator';
+import { presentAnalysis } from '../../tools/analysisPresenter';
+import { submitApproval, checkApprovalStatus } from '../../tools/approvalHandler';
+import { writeApprovedChanges } from '../../tools/tfWriter';
+
+// ─── Zod Schemas ─────────────────────────────────────────────────────────────
+
+const ArchitectureCandidateSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  compute: z.enum(['ec2', 'ecs_fargate', 'lambda']),
+  database: z.enum(['postgresql', 'dynamodb']),
+  cache: z.boolean(),
+  scaling: z.enum(['auto', 'fixed']),
+  instanceType: z.enum(['t3.micro', 't3.medium', 't3.large', 't4g.medium', 'm5.large']),
+  description: z.string().optional(),
+  monthlyCost: z.number().optional(),
+});
+
+const PolicyCheckSchema = z.object({
+  ruleId: z.string(),
+  label: z.string(),
+  passed: z.boolean(),
+  severity: z.enum(['error', 'warning', 'info']).optional(),
+  reason: z.string().optional(),
+});
+
+const PricingBreakdownSchema = z.object({
+  monthlyCost: z.number(),
+  compute: z.number(),
+  storage: z.number(),
+  networkEgress: z.number(),
+  cache: z.number(),
+  other: z.number(),
+});
+
+const RequirementsSchema = z.object({
+  description: z.string(),
+  expectedUsers: z.number(),
+  monthlyBudget: z.number(),
+  slaTarget: z.string(),
+  environment: z.enum(['prod', 'dev', 'staging']),
+  classification: z.array(z.string()),
+});
+
+// ─── Tool Class ───────────────────────────────────────────────────────────────
+
+export class InfraTools {
+
+  // ── 1. read_existing_infrastructure ────────────────────────────────────────
+  @Tool({
+    name: 'read_existing_infrastructure',
+    description:
+      'Reads existing Terraform files from a working directory and returns discovered resources. ' +
+      'Used by the Architecture Designer to surface what is already deployed. ' +
+      'Returns an empty resources array if the directory is missing (treats project as greenfield).',
+    inputSchema: z.object({
+      workingDir: z.string().describe('Path to the directory containing .tf files'),
+    }),
+    invocation: {
+      invoking: 'Reading existing Terraform infrastructure...',
+      invoked: 'Existing infrastructure discovered',
+    },
+  })
+  async readExistingInfrastructure(input: { workingDir: string }) {
+    return readExistingInfrastructure(input);
+  }
+
+  // ── 2. read_company_policies ─────────────────────────────────────────────
+  @Tool({
+    name: 'read_company_policies',
+    description:
+      'Returns the current company compliance rule set from policy.yaml. ' +
+      'Used by the Policy Validator to evaluate each candidate. ' +
+      'Returns an empty rule set (with fallback flag) if policy.yaml is missing.',
+    inputSchema: z.object({}),
+    invocation: {
+      invoking: 'Loading company compliance policies...',
+      invoked: 'Policies loaded',
+    },
+  })
+  async readCompanyPolicies(_input: Record<string, never>) {
+    return readCompanyPolicies();
+  }
+
+  // ── 3. get_cloud_pricing ─────────────────────────────────────────────────
+  @Tool({
+    name: 'get_cloud_pricing',
+    description:
+      'Returns the monthly INR cost for a specific resource type and instance/tier combination. ' +
+      'Uses a static knowledge base — no live API calls. ' +
+      'Pass instanceType as "serviceKey:sizeKey", e.g. "ecs_fargate:t4g.medium" or "postgresql:t3.medium".',
+    inputSchema: z.object({
+      resourceType: z.enum(['compute', 'database', 'cache']).describe(
+        'Category of the resource to price'
+      ),
+      instanceType: z.string().describe(
+        'Service key and instance size, colon-separated: e.g. "ecs_fargate:t4g.medium"'
+      ),
+    }),
+    invocation: {
+      invoking: 'Looking up cloud pricing...',
+      invoked: 'Pricing retrieved',
+    },
+  })
+  async getCloudPricing(input: { resourceType: 'compute' | 'database' | 'cache'; instanceType: string }) {
+    return getCloudPricing(input);
+  }
+
+  // ── 4. estimate_resource_requirements ────────────────────────────────────
+  @Tool({
+    name: 'estimate_resource_requirements',
+    description:
+      'Turns a workload description and expected user count into rough capacity estimates ' +
+      '(CPU, memory, storage growth, expected RPS). ' +
+      'Uses heuristics — intentionally rough for the MVP.',
+    inputSchema: z.object({
+      workloadDescription: z.string().describe('Natural language description of the workload'),
+      expectedUsers: z.number().describe('Expected number of concurrent or monthly users'),
+    }),
+    invocation: {
+      invoking: 'Estimating resource requirements...',
+      invoked: 'Resource estimates ready',
+    },
+  })
+  async estimateResourceRequirements(input: { workloadDescription: string; expectedUsers: number }) {
+    return estimateResourceRequirements(input);
+  }
+
+  // ── 5. generate_candidate_architectures ──────────────────────────────────
+  @Tool({
+    name: 'generate_candidate_architectures',
+    description:
+      'Produces exactly 3 structurally distinct, unpriced architecture candidates from the MVP catalog. ' +
+      'Applies workload-fit filtering (e.g. rejects Lambda for cpu-intensive workloads). ' +
+      'Relaxes the least-critical constraint and flags this if fewer than 3 candidates can be produced.',
+    inputSchema: z.object({
+      requirements: RequirementsSchema.describe('Fully populated requirements object'),
+      constraints: z.object({
+        monthlyBudget: z.number(),
+        slaTarget: z.string(),
+        environment: z.enum(['prod', 'dev', 'staging']),
+      }),
+    }),
+    invocation: {
+      invoking: 'Generating candidate architectures...',
+      invoked: '3 candidates generated',
+    },
+  })
+  async generateCandidateArchitectures(input: {
+    requirements: z.infer<typeof RequirementsSchema>;
+    constraints: { monthlyBudget: number; slaTarget: string; environment: 'prod' | 'dev' | 'staging' };
+  }) {
+    return generateCandidateArchitectures(input as any);
+  }
+
+  // ── 6. compare_architectures ──────────────────────────────────────────────
+  @Tool({
+    name: 'compare_architectures',
+    description:
+      'Deterministic scoring aid for the Coordinator. ' +
+      'Returns budget pass/fail, SLA pass/fail, policy pass rate, and relative cost rank for each candidate. ' +
+      'DOES NOT choose a recommendation. DOES NOT write rejection narration. That is the Coordinator\'s job.',
+    inputSchema: z.object({
+      candidates: z.array(ArchitectureCandidateSchema),
+      policyResults: z.record(z.string(), z.array(PolicyCheckSchema)),
+      constraints: z.object({
+        monthlyBudget: z.number(),
+        slaTarget: z.string(),
+      }),
+    }),
+    invocation: {
+      invoking: 'Scoring candidate architectures...',
+      invoked: 'Scores computed',
+    },
+  })
+  async compareArchitectures(input: {
+    candidates: z.infer<typeof ArchitectureCandidateSchema>[];
+    policyResults: Record<string, z.infer<typeof PolicyCheckSchema>[]>;
+    constraints: { monthlyBudget: number; slaTarget: string };
+  }) {
+    return compareArchitectures(input as any);
+  }
+
+  // ── 7. generate_terraform ─────────────────────────────────────────────────
+  @Tool({
+    name: 'generate_terraform',
+    description:
+      'Produces HCL for the recommended candidate only. ' +
+      'Template-based generation — assumes MVP catalog only. ' +
+      'The returned HCL is not yet written to disk; write_approved_changes does that.',
+    inputSchema: z.object({
+      candidate: ArchitectureCandidateSchema,
+    }),
+    invocation: {
+      invoking: 'Generating Terraform HCL...',
+      invoked: 'Terraform generated',
+    },
+  })
+  async generateTerraform(input: { candidate: z.infer<typeof ArchitectureCandidateSchema> }) {
+    return generateTerraform(input as any);
+  }
+
+  // ── 8. present_analysis ───────────────────────────────────────────────────
+  @Tool({
+    name: 'present_analysis',
+    description:
+      'Packages the Coordinator\'s finished reasoning into an InfrastructureAnalysis payload, ' +
+      'assigns a UUID and timestamp, sets status to "pending", and renders the arch-dashboard widget. ' +
+      'The workflow pauses here — execution resumes after human approval.',
+    inputSchema: z.object({
+      sessionId: z.string(),
+      requirements: RequirementsSchema,
+      recommended: z.object({
+        candidate: ArchitectureCandidateSchema,
+        pricing: PricingBreakdownSchema,
+        policyResults: z.array(PolicyCheckSchema),
+        scores: z.object({
+          candidateId: z.string(),
+          withinBudget: z.boolean(),
+          meetsSla: z.boolean(),
+          policyPassRate: z.number(),
+          relativeCostRank: z.number(),
+        }),
+      }),
+      alternatives: z.array(z.object({
+        candidate: ArchitectureCandidateSchema,
+        rejectionReason: z.string(),
+        pricing: PricingBreakdownSchema.optional(),
+        policyResults: z.array(PolicyCheckSchema).optional(),
+      })),
+      reasoning: z.object({
+        summary: z.string(),
+        bullets: z.array(z.string()),
+        confidence: z.number().min(0).max(1),
+      }),
+      terraform: z.object({ hcl: z.string() }),
+    }),
+    invocation: {
+      invoking: 'Preparing analysis dashboard...',
+      invoked: 'Dashboard ready — awaiting your approval',
+    },
+  })
+  @Widget('arch-dashboard')
+  async presentAnalysis(input: any) {
+    return presentAnalysis(input);
+  }
+
+  // ── 9. submit_approval ────────────────────────────────────────────────────
+  @Tool({
+    name: 'submit_approval',
+    description:
+      'Records the developer\'s Approve or Reject decision. ' +
+      'Called by the dashboard widget\'s Approve/Reject buttons — never by the agent directly.',
+    inputSchema: z.object({
+      analysisId: z.string().describe('UUID of the analysis to approve/reject'),
+      decision: z.enum(['approved', 'rejected']).describe('The developer\'s decision'),
+    }),
+    invocation: {
+      invoking: 'Recording decision...',
+      invoked: 'Decision recorded',
+    },
+  })
+  async submitApproval(input: { analysisId: string; decision: 'approved' | 'rejected' }) {
+    return submitApproval(input);
+  }
+
+  // ── 10. check_approval_status ─────────────────────────────────────────────
+  @Tool({
+    name: 'check_approval_status',
+    description:
+      'Lets the Coordinator poll for the developer\'s decision. ' +
+      'Returns "pending", "approved", or "rejected". Optional — not load-bearing for the dashboard.',
+    inputSchema: z.object({
+      analysisId: z.string().describe('UUID of the analysis to check'),
+    }),
+    invocation: {
+      invoking: 'Checking approval status...',
+      invoked: 'Status retrieved',
+    },
+  })
+  async checkApprovalStatus(input: { analysisId: string }) {
+    return checkApprovalStatus(input);
+  }
+
+  // ── 11. write_approved_changes ────────────────────────────────────────────
+  @Tool({
+    name: 'write_approved_changes',
+    description:
+      'Writes the approved HCL to sample-project/main.tf inside a managed marker block. ' +
+      'Idempotent: replaces the managed block on repeated runs. ' +
+      'Only succeeds if status is "approved".',
+    inputSchema: z.object({
+      analysisId: z.string().describe('UUID of the approved analysis to write'),
+    }),
+    invocation: {
+      invoking: 'Writing Terraform to disk...',
+      invoked: 'Terraform written successfully',
+    },
+  })
+  async writeApprovedChanges(input: { analysisId: string }) {
+    return writeApprovedChanges(input);
+  }
+}

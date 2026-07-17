@@ -1,0 +1,114 @@
+{
+  "catalogVersion": "mvp-1.0",
+  "region": "us-east-1",
+  "computeOptions": ["ec2", "ecs_fargate", "lambda"],
+  "databaseOptions": ["postgresql", "dynamodb"],
+  "cacheOptions": ["redis", "none"],
+  "scalingOptions": ["auto", "fixed"],
+  "instanceTypes": ["t3.micro", "t3.medium", "t3.large", "t4g.medium", "m5.large"],
+  "slaCapabilities": {
+    "ec2": {
+      "auto": "99.9%",
+      "fixed": "99.5%"
+    },
+    "ecs_fargate": {
+      "auto": "99.9%",
+      "fixed": "99.5%"
+    },
+    "lambda": {
+      "auto": "99.95%",
+      "fixed": "99.95%"
+    },
+    "eks": {
+      "auto": "99.99%",
+      "fixed": "99.9%"
+    }
+  },
+  "operationalComplexity": {
+    "ec2": "medium",
+    "ecs_fargate": "low",
+    "lambda": "low",
+    "eks": "high"
+  },
+  "workloadFit": {
+    "cpu-intensive": {
+      "recommended": ["ec2", "ecs_fargate"],
+      "discouraged": ["lambda"],
+      "reason": "Lambda has 15-min execution limit and cold starts — poor fit for sustained CPU-bound work"
+    },
+    "io-bound": {
+      "recommended": ["lambda", "ecs_fargate", "ec2"],
+      "discouraged": [],
+      "reason": "All options work; Lambda shines for short-lived I/O"
+    },
+    "batch": {
+      "recommended": ["ec2", "ecs_fargate"],
+      "discouraged": ["lambda"],
+      "reason": "Batch jobs often exceed Lambda duration limits"
+    },
+    "event-driven": {
+      "recommended": ["lambda", "ecs_fargate"],
+      "discouraged": [],
+      "reason": "Both handle event-driven well; Lambda is cheaper at low volume"
+    }
+  },
+  "armCompatibility": {
+    "t4g.medium": true,
+    "t3.micro": false,
+    "t3.medium": false,
+    "t3.large": false,
+    "m5.large": false
+  },
+  "candidateTemplates": [
+    {
+      "id": "template-a",
+      "label": "ECS Fargate + PostgreSQL",
+      "compute": "ecs_fargate",
+      "database": "postgresql",
+      "cache": false,
+      "scaling": "auto",
+      "instanceType": "t4g.medium",
+      "description": "Managed containers with ARM RDS — lowest ops overhead, ARM savings"
+    },
+    {
+      "id": "template-b",
+      "label": "EC2 + PostgreSQL + Redis",
+      "compute": "ec2",
+      "database": "postgresql",
+      "cache": true,
+      "scaling": "auto",
+      "instanceType": "t3.large",
+      "description": "Traditional VM with caching — highest control, medium complexity"
+    },
+    {
+      "id": "template-c",
+      "label": "Lambda + DynamoDB",
+      "compute": "lambda",
+      "database": "dynamodb",
+      "cache": false,
+      "scaling": "auto",
+      "instanceType": "t3.medium",
+      "description": "Serverless — zero-server ops, event-driven, variable cost"
+    },
+    {
+      "id": "template-d",
+      "label": "ECS Fargate + DynamoDB + Redis",
+      "compute": "ecs_fargate",
+      "database": "dynamodb",
+      "cache": true,
+      "scaling": "auto",
+      "instanceType": "t3.medium",
+      "description": "Containers with NoSQL and caching — high throughput, auto-scale"
+    },
+    {
+      "id": "template-e",
+      "label": "EC2 + DynamoDB",
+      "compute": "ec2",
+      "database": "dynamodb",
+      "cache": false,
+      "scaling": "fixed",
+      "instanceType": "t3.medium",
+      "description": "VM with NoSQL — predictable cost, simple ops"
+    }
+  ]
+}

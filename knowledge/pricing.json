@@ -1,0 +1,56 @@
+{
+  "region": "us-east-1",
+  "currency": "INR",
+  "note": "Static monthly pricing estimates for MVP demo. All costs in Indian Rupees (INR) per month.",
+  "compute": {
+    "ec2": {
+      "t3.micro":   { "monthlyCost": 620,   "vcpu": 2,  "memory": "1GB",  "arch": "x86" },
+      "t3.medium":  { "monthlyCost": 2470,  "vcpu": 2,  "memory": "4GB",  "arch": "x86" },
+      "t3.large":   { "monthlyCost": 4940,  "vcpu": 2,  "memory": "8GB",  "arch": "x86" },
+      "t4g.medium": { "monthlyCost": 1985,  "vcpu": 2,  "memory": "4GB",  "arch": "arm" },
+      "m5.large":   { "monthlyCost": 8200,  "vcpu": 2,  "memory": "8GB",  "arch": "x86" }
+    },
+    "ecs_fargate": {
+      "t3.micro":   { "monthlyCost": 750,   "vcpu": 0.25, "memory": "0.5GB", "arch": "x86" },
+      "t3.medium":  { "monthlyCost": 2970,  "vcpu": 0.5,  "memory": "1GB",   "arch": "x86" },
+      "t3.large":   { "monthlyCost": 5940,  "vcpu": 1,    "memory": "2GB",   "arch": "x86" },
+      "t4g.medium": { "monthlyCost": 2380,  "vcpu": 0.5,  "memory": "1GB",   "arch": "arm" },
+      "m5.large":   { "monthlyCost": 9840,  "vcpu": 2,    "memory": "4GB",   "arch": "x86" }
+    },
+    "lambda": {
+      "t3.micro":   { "monthlyCost": 415,   "vcpu": null, "memory": "128MB",  "arch": "x86", "note": "Based on 1M requests/month @ 200ms avg" },
+      "t3.medium":  { "monthlyCost": 830,   "vcpu": null, "memory": "512MB",  "arch": "x86", "note": "Based on 1M requests/month @ 200ms avg" },
+      "t3.large":   { "monthlyCost": 1660,  "vcpu": null, "memory": "1GB",    "arch": "x86", "note": "Based on 1M requests/month @ 200ms avg" },
+      "t4g.medium": { "monthlyCost": 665,   "vcpu": null, "memory": "512MB",  "arch": "arm", "note": "ARM Lambda (20% cheaper)" },
+      "m5.large":   { "monthlyCost": 3320,  "vcpu": null, "memory": "3GB",    "arch": "x86", "note": "Based on 1M requests/month @ 200ms avg" }
+    }
+  },
+  "database": {
+    "postgresql": {
+      "t3.micro":   { "monthlyCost": 1240,  "storage": "20GB included",  "multiAz": false },
+      "t3.medium":  { "monthlyCost": 4940,  "storage": "20GB included",  "multiAz": false },
+      "t3.large":   { "monthlyCost": 9880,  "storage": "100GB included", "multiAz": false },
+      "t4g.medium": { "monthlyCost": 3950,  "storage": "20GB included",  "multiAz": false },
+      "m5.large":   { "monthlyCost": 14820, "storage": "100GB included", "multiAz": false }
+    },
+    "dynamodb": {
+      "t3.micro":   { "monthlyCost": 830,   "note": "On-demand, ~5 WCU/5 RCU avg" },
+      "t3.medium":  { "monthlyCost": 2490,  "note": "On-demand, ~15 WCU/15 RCU avg" },
+      "t3.large":   { "monthlyCost": 4150,  "note": "On-demand, ~25 WCU/25 RCU avg" },
+      "t4g.medium": { "monthlyCost": 2490,  "note": "On-demand, ~15 WCU/15 RCU avg" },
+      "m5.large":   { "monthlyCost": 8300,  "note": "Provisioned, 50 WCU/50 RCU" }
+    }
+  },
+  "cache": {
+    "redis": {
+      "t3.micro":   { "monthlyCost": 1030,  "memory": "0.5GB", "arch": "x86" },
+      "t3.medium":  { "monthlyCost": 2060,  "memory": "3.09GB","arch": "x86" },
+      "t3.large":   { "monthlyCost": 4120,  "memory": "6.38GB","arch": "x86" },
+      "t4g.medium": { "monthlyCost": 1648,  "memory": "3.09GB","arch": "arm" },
+      "m5.large":   { "monthlyCost": 6180,  "memory": "6.38GB","arch": "x86" }
+    }
+  },
+  "network": {
+    "egress_per_gb_inr": 7
+  }
+}

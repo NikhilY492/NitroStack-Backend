@@ -1,0 +1,18 @@
+{
+  "name": "shift-left-finops",
+  "version": "1.0.0",
+  "widgets": {
+    "basePath": "/src/widgets",
+    "routes": [
+      {
+        "name": "arch-dashboard",
+        "path": "/arch-dashboard",
+        "description": "Architecture Analysis Dashboard — renders candidate architectures, cost breakdown, policy badges, Terraform diff, and Approve/Reject controls"
+      }
+    ]
+  },
+  "server": {
+    "port": 3000,
+    "transport": "stdio"
+  }
+}

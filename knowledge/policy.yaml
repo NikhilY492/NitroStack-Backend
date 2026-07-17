@@ -1,0 +1,68 @@
+version: "1.0"
+rules:
+  - id: budget-prod
+    label: Prod Budget Compliant
+    description: Production environments must stay under ₹50,000/month total cost
+    appliesTo:
+      - prod
+    check:
+      field: monthlyCost
+      operator: lte
+      value: 50000
+
+  - id: budget-dev
+    label: Dev Budget Compliant
+    description: Dev and staging environments must stay under ₹10,000/month total cost
+    appliesTo:
+      - dev
+      - staging
+    check:
+      field: monthlyCost
+      operator: lte
+      value: 10000
+
+  - id: arm-preferred
+    label: ARM Preferred
+    description: >
+      Prefer ARM-based instances (t4g family) where the application stack supports ARM.
+      Violation is a warning, not a hard failure — flag but do not reject.
+    appliesTo:
+      - prod
+      - dev
+      - staging
+    check:
+      field: instanceType
+      operator: startsWith
+      value: t4g
+    severity: warning
+
+  - id: no-lambda-cpu
+    label: No Lambda for CPU-Intensive
+    description: >
+      Lambda must not be used for CPU-intensive workloads due to 15-minute execution
+      limit and cold-start latency. Applies when workload classification includes
+      'cpu-intensive'.
+    appliesTo:
+      - prod
+      - dev
+      - staging
+    check:
+      field: compute
+      operator: neq
+      value: lambda
+      condition: workloadClassification.includes('cpu-intensive')
+    severity: error
+
+  - id: multi-az-prod
+    label: HA / Auto-Scaling for Prod
+    description: >
+      Production workloads must use Auto Scaling or a managed service that provides
+      equivalent high availability. Fixed-scaling single-instance deployments in
+      production are prohibited.
+    appliesTo:
+      - prod
+    check:
+      field: scaling
+      operator: eq
+      value: auto
+    severity: error
