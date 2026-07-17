@@ -4,7 +4,7 @@
 
 **Team size:** 4
 **Format:** Hackathon build (~14 hours)
-**Stack:** MCP Server (Node/TypeScript) + Express bridge + React frontend + Terraform + static pricing/compliance knowledge base
+**Stack:** NitroStack (TypeScript MCP server framework) + `@nitrostack/widgets` (React UI widgets attached directly to tool outputs) + Terraform + static pricing/compliance knowledge base
 
 ---
 
@@ -109,61 +109,55 @@ Hardcode a small knowledge base (pricing + compliance tags) for these options. T
 ## 7. System Architecture
 
 ```
-┌─────────────┐         ┌──────────────────────┐         ┌────────────────────┐
-│  Developer  │  prompt │   AI Assistant        │  MCP    │   MCP Server        │
-│  (Claude/   ├────────▶│  (Claude Code, etc.)  ├────────▶│   (Node/TS)         │
-│   Cursor)   │         └──────────────────────┘  tools   │                     │
-└─────────────┘                                            │  - workload         │
-                                                             │    classifier       │
-                                                             │  - tf_reader        │
-                                                             │  - policy_reader    │
-                                                             │  - pricing_client   │
-                                                             │  - resource_        │
-                                                             │    estimator        │
-                                                             │  - candidate_       │
-                                                             │    generator        │
-                                                             │  - architecture_    │
-                                                             │    comparator       │
-                                                             │  - terraform_       │
-                                                             │    generator        │
-                                                             └──────────┬──────────┘
-                                                                        │
-                                                          POST /analysis (JSON payload:
-                                                          recommended + alternatives +
-                                                          reasoning + confidence)
-                                                                        │
-                                                                        ▼
-                                                             ┌─────────────────────┐
-                                                             │  Express Bridge      │
-                                                             │  (co-located w/ MCP  │
-                                                             │   server)            │
-                                                             │                      │
-                                                             │  /api/analysis (GET) │
-                                                             │  /api/approve (POST) │
-                                                             │  WS: live updates    │
-                                                             └──────────┬───────────┘
-                                                                        │
-                                                              serves + streams to
-                                                                        │
-                                                                        ▼
-                                                             ┌─────────────────────┐
-                                                             │  React Dashboard     │
-                                                             │  (localhost:5173)    │
-                                                             │                      │
-                                                             │  Recommended arch,   │
-                                                             │  why-panel, alter-   │
-                                                             │  natives table,      │
-                                                             │  Terraform diff      │
-                                                             └──────────┬───────────┘
-                                                                        │
-                                                             POST /api/approve
-                                                                        │
-                                                                        ▼
-                                                             MCP Server writes .tf
-                                                             files to local disk
+┌─────────────┐         ┌──────────────────────┐         ┌──────────────────────────┐
+│  Developer  │  prompt │   AI Assistant /      │  MCP    │   NitroStack MCP Server   │
+│  (Claude/   ├────────▶│   Agent (system       ├────────▶│   (@nitrostack/core)      │
+│   Cursor)   │         │   prompt in           │  tools  │                           │
+└─────────────┘         │   prompts/            │         │  @Tool-decorated:         │
+                         │   architectAgent.md)  │         │  - workload_classifier    │
+                         └──────────────────────┘         │  - tf_reader               │
+                                                            │  - policy_reader           │
+                                                            │  - pricing_client          │
+                                                            │  - resource_estimator      │
+                                                            │  - candidate_generator     │
+                                                            │  - architecture_comparator │
+                                                            │      @Widget('arch-        │
+                                                            │       dashboard') ◀── UI   │
+                                                            │  - terraform_generator     │
+                                                            │  - submit_approval         │
+                                                            │      (called BY the widget,│
+                                                            │       not by the agent)    │
+                                                            └────────────┬───────────────┘
+                                                                         │
+                                                     tool result (InfrastructureAnalysis
+                                                     JSON) is rendered by the client
+                                                     inline using the attached widget
+                                                                         │
+                                                                         ▼
+                                                            ┌───────────────────────────┐
+                                                            │  Architecture Dashboard    │
+                                                            │  Widget (React, built with │
+                                                            │  @nitrostack/widgets,      │
+                                                            │  rendered inline in the AI │
+                                                            │  client — no separate app, │
+                                                            │  no separate port)         │
+                                                            │                            │
+                                                            │  Recommended arch,         │
+                                                            │  why-panel, alternatives   │
+                                                            │  table, Terraform diff     │
+                                                            └────────────┬───────────────┘
+                                                                         │
+                                                     widget calls the `submit_approval`
+                                                     tool directly via the widget SDK's
+                                                     built-in tool-call bridge — no REST
+                                                     endpoint, no WebSocket
+                                                                         │
+                                                                         ▼
+                                                            MCP Server writes .tf files
+                                                            to local disk
 ```
 
-**Key architectural decision unchanged from before:** MCP server and Express bridge share a process (or two localhost processes sharing an in-memory store). The MCP server never writes to disk directly — it parks the full analysis (recommended + alternatives + reasoning) in the bridge's pending-approval store, and the AI assistant polls a status-check tool until a decision is made.
+**Key architectural decision, updated for NitroStack:** there is no separate Express bridge or standalone dashboard process anymore. NitroStack lets a React component be attached directly to a tool's output via the `@Widget()` decorator, and that component is rendered inline by the AI client. The widget talks back to the server the same way the agent does — by calling MCP tools — so `submit_approval` is just another `@Tool`, invoked by the widget's Approve/Reject buttons instead of by the agent. The MCP server still never writes to disk on its own: `generate_terraform`/`compare_architectures` park the pending analysis in an in-memory store, and `write_approved_changes` only fires once `submit_approval` has recorded a decision. The agent can still poll `check_approval_status` if you want the chat thread to report back once the developer decides (Section 9), but it's no longer required to unblock the UI — the widget already reflects real-time state because it's rendered from live tool output.
 
 ---
 
@@ -175,9 +169,9 @@ Hardcode a small knowledge base (pricing + compliance tags) for these options. T
 4. **Candidate generation:** `generate_candidate_architectures` returns exactly 3 fully-specified, fully-priced options from the MVP catalog (Section 6).
 5. **Comparison:** `compare_architectures` scores each candidate against budget/SLA/policy and returns a recommendation plus rejection reasons for the other two.
 6. **Terraform generation:** `generate_terraform` produces the HCL for the *recommended* candidate only (alternatives don't need HCL generated, just cost + reasoning).
-7. **Data handoff:** MCP server POSTs the full `InfrastructureAnalysis` payload (Section 12) to the bridge and emits a WebSocket event. Tool call returns to the AI with a "pushed to dashboard, awaiting approval" message.
-8. **Visual approval:** Dashboard renders the recommended architecture, the why-panel, the alternatives table, cost breakdown, policy badges, and the Terraform diff. Developer reviews and clicks **Approve**.
-9. **Execution:** React POSTs the decision to `/api/approve`. MCP server's `write_approved_changes` tool writes the approved HCL to disk. AI assistant reports success back in the original chat.
+7. **Data handoff:** `compare_architectures` (or a dedicated `present_analysis` tool) returns the full `InfrastructureAnalysis` payload (Section 12) as its tool result. Because that tool is decorated with `@Widget('arch-dashboard')`, the AI client renders the attached React widget inline using that payload — no bridge, no POST, no WebSocket to wire up. Tool call returns to the agent with a "pushed to dashboard, awaiting approval" message.
+8. **Visual approval:** The widget renders the recommended architecture, the why-panel, the alternatives table, cost breakdown, policy badges, and the Terraform diff. Developer reviews and clicks **Approve**.
+9. **Execution:** The widget calls the `submit_approval` tool directly through the `@nitrostack/widgets` tool-call bridge. NitroStack's `write_approved_changes` tool writes the approved HCL to disk. AI assistant reports success back in the original chat.
 
 ---
 
@@ -192,12 +186,15 @@ Reasoning tools, not just Terraform tools — the AI orchestrates these in whate
 | `get_cloud_pricing` | `{ resourceType, instanceType }` | `{ monthlyCost, unit }` from the static knowledge base |
 | `estimate_resource_requirements` | `{ workloadDescription, expectedUsers }` | `{ cpu, memory, storageGrowth, expectedRps }` |
 | `generate_candidate_architectures` | `{ requirements, constraints }` | Array of exactly 3 `ArchitectureCandidate` objects, each priced |
-| `compare_architectures` | `{ candidates, policies, constraints }` | `{ recommended, alternatives, reasoning, confidence }` |
+| `compare_architectures` — `@Widget('arch-dashboard')` | `{ candidates, policies, constraints }` | `{ recommended, alternatives, reasoning, confidence }` — this is the tool the dashboard widget is attached to; its return value *is* the widget's props |
 | `generate_terraform` | `{ candidate }` | HCL string for the recommended candidate |
-| `check_approval_status` | `{ analysisId }` | `{ status: "pending" \| "approved" \| "rejected" }` — the AI polls this after pushing |
+| `submit_approval` | `{ analysisId, decision: "approved" \| "rejected" }` | `{ status }` — called BY the widget's Approve/Reject buttons via the `@nitrostack/widgets` tool-call bridge, not by the agent |
+| `check_approval_status` | `{ analysisId }` | `{ status: "pending" \| "approved" \| "rejected" }` — optional: the agent can poll this if the chat thread should report back once the developer decides |
 | `write_approved_changes` | `{ analysisId }` | `{ success, filesWritten }` — only callable once status is `"approved"` |
 
-**Blocking mechanic — unchanged recommendation from the original plan:** use the poll-based approach (`check_approval_status` looped by the AI) as the default, not a true-blocking server call. It's far more demo-robust — a dropped WebSocket or closed browser tab won't hang the whole agent.
+All of the above are registered with plain `@Tool()` decorators from `@nitrostack/core`; `compare_architectures` additionally carries `@Widget('arch-dashboard')` to attach the React component Track D builds (Section 13).
+
+**Blocking mechanic — updated for NitroStack:** the widget calling `submit_approval` directly is what actually unblocks the UI in real time — there's no WebSocket or dropped-connection risk because it's a normal MCP tool call, not a separate HTTP/WS layer. `check_approval_status` remains available for the agent to poll only if you want the original chat thread to narrate the outcome; it's no longer load-bearing for the dashboard itself.
 
 ---
 
@@ -205,13 +202,12 @@ Reasoning tools, not just Terraform tools — the AI orchestrates these in whate
 
 | Layer | Choice | Why |
 |---|---|---|
-| MCP Server | Node.js + TypeScript, `@modelcontextprotocol/sdk` | Official SDK, first-class tool orchestration |
-| Bridge API | Express.js (co-located with MCP server) | Minimal, fast to wire under time pressure |
-| Realtime | WebSocket (`ws`) with polling fallback | Push feels premium; polling is the safety net |
-| Frontend | React + Vite + TypeScript | Fast dev server, HMR |
-| Styling | Tailwind CSS + glassmorphism utility classes | Rapid iteration, consistent dark-mode tokens |
+| MCP Server | NitroStack (`@nitrostack/core`) — decorator-driven tools, DI, auth, middleware | Purpose-built for MCP servers; removes the Express-bridge boilerplate entirely and gives us `@Widget` for free |
+| Frontend / UI Widgets | React + TypeScript, built with `@nitrostack/widgets` | **Frontend must be built as NitroStack widgets, not a standalone SPA** — components are attached to tool outputs via `@Widget()` and rendered inline by the AI client, so there's no separate dev server, port, or CORS setup to demo around |
+| Styling | Tailwind CSS + glassmorphism utility classes | Rapid iteration, consistent dark-mode tokens (works the same inside a NitroStack widget) |
 | Charts | Recharts | Donut/bar cost breakdown with minimal setup |
 | Animation | Framer Motion + count-up hook | Smooth number count-up, card transitions |
+| Local dev / testing | NitroStudio | Desktop app for hot-reloading widgets, testing tools, and chatting with the server without needing a real AI client during development |
 | Terraform parsing | Regex/marker-block extraction for MVP | Full HCL parsing is a stretch goal |
 | Pricing & compliance | Static JSON knowledge base (no live API calls in MVP) | Removes network/API-key risk from the demo entirely |
 | Agent reasoning | LLM (Claude) orchestrating the MCP tools above via system prompt | No hand-coded decision tree — the model does the tradeoff reasoning |
