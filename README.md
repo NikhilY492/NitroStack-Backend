@@ -1,179 +1,131 @@
-# Shift-Left FinOps: Autonomous Infrastructure Planning Agent
+# Shift-Left-FinOPS
 
-> *An agent that reasons through cost, performance, reliability, and compliance tradeoffs — and only writes Terraform once a human has seen and approved the thinking behind it.*
+> Shift-Left FinOps is an autonomous infrastructure planning agent that designs cloud infrastructure by reasoning about cost, performance, scalability, reliabi…
 
----
+![Model Context Protocol](https://img.shields.io/badge/Model%20Context%20Protocol-MCP-blue) ![Built with Nitrostack](https://img.shields.io/badge/Built%20with-Nitrostack-0A66FF) ![Status](https://img.shields.io/badge/status-live-brightgreen)
 
-## Quick Start
+**Shift-Left-FinOPS** is an [MCP (Model Context Protocol)](https://nitrostack.ai) server that extends AI assistants — like Claude, Cursor, and any MCP-compatible client — with new, real-world capabilities. It is built and deployed on [Nitrostack](https://nitrostack.ai), the fastest way to build, deploy, and share MCP apps.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [What is MCP?](#what-is-mcp)
+- [Features](#features)
+- [Live Demo](#live-demo)
+- [Getting Started](#getting-started)
+- [Connect to an MCP Client](#connect-to-an-mcp-client)
+- [Deploy Your Own MCP App](#deploy-your-own-mcp-app)
+- [Explore More MCP Apps](#explore-more-mcp-apps)
+- [FAQ](#faq)
+- [Keywords](#keywords)
+- [License](#license)
+
+## Overview
+
+Shift-Left FinOps is an autonomous infrastructure planning agent that designs cloud infrastructure by reasoning about cost, performance, scalability, reliability, and organizational policies before generating Terraform.
+
+## What is MCP?
+
+The **Model Context Protocol (MCP)** is an open standard that lets AI assistants securely connect to external tools, data sources, and services. Instead of being limited to what it was trained on, an AI model can call **MCP servers** to fetch live data, run actions, and integrate with real systems.
+
+This project is one such MCP server. Learn more about building and shipping MCP apps at [nitrostack.ai](https://nitrostack.ai).
+
+## Features
+
+- 🔌 **MCP-native** — works with any MCP-compatible client (Claude, Cursor, and more)
+- 🛠️ **Tools, resources & prompts** — exposes structured capabilities to AI agents
+- ⚡ **Deployed on Nitrostack** — reliable, hosted, and instantly shareable
+- 🔐 **Secure by design** — secrets stay in environment variables, never in code
+- 🧩 **Composable** — combine with other MCP apps to build powerful AI workflows
+
+## Live Demo
+
+🚀 **Live MCP endpoint:** https://finops-6a5b0-wheres-dheeraj-amrita-university-amritapuri-campus.app.nitrocloud.ai
+
+Point your MCP client at the endpoint above to try it instantly. Prefer a hosted setup? Deploy your own in minutes on [Nitrostack](https://nitrostack.ai).
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ (or your project runtime)
+- An MCP-compatible client (Claude Desktop, Cursor, etc.)
+
+### Installation
 
 ```bash
-# Install dependencies
+git clone https://github.com/your-username/your-mcp-project.git
+cd shift-left-finops
 npm install
-
-# Install widget dependencies
-cd src/widgets && npm install && cd ../..
-
-# Run the MCP server
-npm run dev
 ```
 
-Open the project in **NitroStudio** for hot-reload, tool testing, and widget preview.
+### Configuration
 
----
+Copy the example environment file and add your own values:
 
-## What This Is
-
-This is a **NitroStack MCP server** that exposes 11 backend tools to an LLM-driven Agent Runtime. The LLM (Claude/Cursor) drives a 6-stage reasoning workflow that:
-
-1. Classifies the workload from a plain-language description
-2. Generates 3 candidate architectures from the MVP catalog
-3. Prices each candidate (static INR pricing, no live API calls)
-4. Validates each candidate against 5 company policy rules
-5. Recommends the best option using a six-factor decision model
-6. Presents the full analysis on a dashboard widget — **and pauses**
-7. Writes Terraform **only** after a human approves
-
-**Terraform is not the starting point and not the product. It's the final artifact of the reasoning process.**
-
----
-
-## Architecture
-
-```
-Developer prompt
-    │
-    ▼
-LLM (Claude / Cursor)
-    │
-    ▼
-Agent Runtime (6 logical stages)
-    │
-    ├─ Planner              (triage, session detection)
-    ├─ Requirements Extractor (structured extraction, classification)
-    ├─ Architecture Designer  (candidate generation, pruning)
-    ├─ Cost Analyst           (pricing per resource per candidate)
-    ├─ Policy Validator       (compliance check per rule per candidate)
-    └─ Coordinator            (six-factor decision, terraform, dashboard)
-         │
-         ▼
-    MCP Tool Calls (only when reasoning decides they're needed)
-         │
-         ▼
-    NitroStack MCP Server (this repo)
-         │
-         ├─ Backend tools (pure functions, no reasoning)
-         ├─ Knowledge base (pricing.json, compute-catalog.json, policy.yaml)
-         └─ @Widget('arch-dashboard') → React dashboard
+```bash
+cp .env.example .env
 ```
 
----
+### Run
 
-## Project Structure
-
-```
-shift-left-finops/
-├── knowledge/
-│   ├── pricing.json           # Static AWS pricing (INR/month)
-│   ├── compute-catalog.json   # MVP catalog + candidate templates
-│   └── policy.yaml            # 5 compliance rules
-├── sample-project/
-│   └── main.tf                # Existing VPC (write_approved_changes appends here)
-├── src/
-│   ├── index.ts               # NitroStack server bootstrap
-│   ├── app.module.ts          # Root module
-│   ├── types/
-│   │   └── state.ts           # Full TypeScript type system
-│   ├── store/
-│   │   └── pendingAnalyses.ts # In-memory approval store
-│   ├── tools/                 # Pure function implementations (no reasoning)
-│   │   ├── tfReader.ts        # read_existing_infrastructure
-│   │   ├── policyReader.ts    # read_company_policies
-│   │   ├── pricingLookup.ts   # get_cloud_pricing
-│   │   ├── resourceEstimator.ts # estimate_resource_requirements
-│   │   ├── candidateGenerator.ts # generate_candidate_architectures
-│   │   ├── architectureComparer.ts # compare_architectures
-│   │   ├── terraformGenerator.ts # generate_terraform
-│   │   ├── analysisPresenter.ts  # present_analysis
-│   │   ├── approvalHandler.ts    # submit_approval + check_approval_status
-│   │   └── tfWriter.ts           # write_approved_changes
-│   ├── modules/
-│   │   └── infra/
-│   │       ├── infra.tools.ts    # @Tool + @Widget decorations (NitroStack)
-│   │       └── infra.module.ts
-│   ├── agents/                # Prompt specifications for each reasoning stage
-│   │   ├── planner.md
-│   │   ├── requirements.md
-│   │   ├── architect.md
-│   │   ├── cost.md
-│   │   ├── policy.md
-│   │   └── coordinator.md
-│   ├── schemas/
-│   │   └── state.schema.json  # JSON Schema for AgentState
-│   ├── contracts/
-│   │   └── tool-contracts.md  # AI ↔ Backend contract
-│   └── widgets/               # Next.js widget workspace
-│       ├── package.json
-│       ├── tsconfig.json
-│       └── app/
-│           ├── layout.tsx
-│           ├── globals.css
-│           └── arch-dashboard/
-│               └── page.tsx   # The approval dashboard widget
-├── package.json
-├── tsconfig.json
-├── nitro.config.json
-└── .env
+```bash
+npm run start
 ```
 
+## Connect to an MCP Client
+
+Add this server to your MCP client configuration. A typical entry looks like:
+
+```json
+{
+  "mcpServers": {
+    "shift-left-finops": {
+      "url": "https://finops-6a5b0-wheres-dheeraj-amrita-university-amritapuri-campus.app.nitrocloud.ai"
+    }
+  }
+}
+```
+
+Restart your client and the tools from this MCP server will be available to your AI assistant.
+
+## Deploy Your Own MCP App
+
+Want to build and ship an MCP server like this one? **[Nitrostack](https://nitrostack.ai)** lets you create, deploy, and host MCP apps in minutes — no infrastructure to manage.
+
+👉 **Start building:** [https://nitrostack.ai](https://nitrostack.ai)
+
+## Explore More MCP Apps
+
+- 🌙 Discover and share MCP projects with the community on [r/mcptothemoon](https://www.reddit.com/r/mcptothemoon/)
+- 🧰 Browse a growing catalog of MCP apps on [Nitrostack](https://nitrostack.ai/apps)
+
+## FAQ
+
+### What is an MCP server?
+
+An MCP server implements the Model Context Protocol to expose tools, resources, and prompts that AI assistants can call. It lets an AI model take real actions and access live data.
+
+### What does Shift-Left-FinOPS do?
+
+Shift-Left FinOps is an autonomous infrastructure planning agent that designs cloud infrastructure by reasoning about cost, performance, scalability, reliabi…
+
+### Which AI clients does this work with?
+
+Any MCP-compatible client, including Claude Desktop and Cursor. New clients are adding MCP support regularly.
+
+### How do I deploy my own MCP app?
+
+Use [Nitrostack](https://nitrostack.ai) to build, deploy, and host MCP apps without managing infrastructure.
+
+## Keywords
+
+`Open Innovation` · `Shift-Left-FinOPS` · `MCP` · `Model Context Protocol` · `MCP server` · `MCP app` · `AI tools` · `AI agents` · `LLM tools` · `Claude MCP` · `Nitrostack` · `deploy MCP server` · `build MCP app`
+
+## License
+
+MIT © 2026
+
 ---
 
-## MVP Scope (Hard Boundaries)
-
-| Dimension | Allowed Values |
-|---|---|
-| Compute | EC2, ECS Fargate, Lambda |
-| Database | PostgreSQL (RDS), DynamoDB |
-| Cache | Redis — yes / no |
-| Scaling | Auto, Fixed |
-| Instance Types | t3.micro, t3.medium, t3.large, t4g.medium, m5.large |
-| Region | us-east-1 only |
-| Candidates per run | Exactly 3 |
-| Pricing | Static JSON (no live API) |
-
----
-
-## Demo Flow
-
-1. Open NitroStudio and connect to this server
-2. Send to the LLM: *"Build infrastructure for an image-processing backend serving 100,000 users, under ₹35,000/month with 99.9% availability."*
-3. Watch the agent runtime work through the 6 stages
-4. The `arch-dashboard` widget appears with:
-   - Animated cost counter
-   - 3 candidate cards (recommended + 2 rejected with reasons)
-   - Donut chart cost breakdown
-   - Policy compliance badges
-   - AI reasoning bullets
-   - Terraform diff viewer
-5. Click **Approve** — Terraform is written to `sample-project/main.tf`
-
----
-
-## Key Design Decisions
-
-- **MCP is plumbing, not the brain.** All 11 tools are pure functions. Zero tradeoff logic lives in the backend.
-- **No live pricing APIs.** Uses a static `pricing.json` knowledge base — removes network/API-key risk from the demo.
-- **No separate dashboard process.** `@Widget('arch-dashboard')` attaches the React component directly to `present_analysis`'s output — NitroStudio renders it inline.
-- **Approval is widget-native.** The Approve/Reject buttons call `submit_approval` via `callTool()` from `useWidgetSDK` — no Express bridge needed.
-- **Idempotent writes.** `write_approved_changes` uses marker blocks (`# SHIFT-LEFT-FINOPS: managed block start/end`) so re-runs replace, not duplicate.
-
----
-
-## Policy Rules (knowledge/policy.yaml)
-
-| Rule | Applies To | Severity |
-|---|---|---|
-| `budget-prod` — Prod ≤ ₹50,000/mo | prod | error |
-| `budget-dev` — Dev ≤ ₹10,000/mo | dev, staging | error |
-| `arm-preferred` — Prefer t4g instances | all | warning |
-| `no-lambda-cpu` — No Lambda for CPU-intensive | all | error |
-| `multi-az-prod` — Must use auto-scaling in prod | prod | error |
+Built with ❤️ using the Model Context Protocol on [Nitrostack](https://nitrostack.ai). Share your MCP app on [r/mcptothemoon](https://www.reddit.com/r/mcptothemoon/).
