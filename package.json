@@ -1,0 +1,25 @@
+{
+  "name": "shift-left-finops-agent",
+  "version": "0.1.0",
+  "description": "Autonomous Infrastructure Planning Agent - Phase 1: Shared Contract Layer",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "clean": "rmdir /s /q dist"
+  },
+  "keywords": [
+    "infrastructure",
+    "finops",
+    "agent",
+    "terraform",
+    "aws"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}
