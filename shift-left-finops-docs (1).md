@@ -827,35 +827,42 @@ interface PolicyCheck {
 ### Components
 
 **1. Recommended Architecture Card**
+
 - Top of page, full-width glass card
 - Shows compute / database / cache / scaling / instance type as a clean spec grid
 - Large monthly cost figure with animated count-up on mount
 - Confidence score as a circular or linear progress indicator (e.g. "91% confidence") — this is `reasoning.confidence` from the Coordinator, not a generic UI flourish
 
 **2. Why Panel**
+
 - Below the recommended card
 - Renders `reasoning.summary` as a checklist of short bullet points, each with a ✓ icon
 - e.g. "✓ Meets budget · ✓ Meets SLA · ✓ Lowest operational overhead · ✓ Company policy compliant"
 - Keep each bullet to one sentence — this is a glanceable panel, not an essay
 
 **3. Alternatives Table**
+
 - Simple table: Option | Monthly Cost | Why Rejected
 - Recommended option not repeated here — this is *only* the 2 rejected candidates, each with the Coordinator's `rejectionReason`
 - Muted/greyed styling relative to the recommended card to visually demote it
 
 **4. Resource Breakdown Chart**
+
 - Recharts donut or horizontal bar: Compute / Storage / Network Egress / Other
 - Hover tooltip with exact dollar amounts, no cluttered legend
 
 **5. Policy Compliance Badges**
+
 - Row of pill badges, ✅/⚠️
 - e.g. "✅ Dev Budget Compliant" · "✅ ARM Supported" · "✅ Auto Scaling Policy Met"
 
 **6. Terraform Diff**
+
 - Collapsible code block (monospace, syntax-highlighted if time allows) showing the HCL that will be written
 - Diff-style +/- coloring if there's existing matching state; otherwise just render as a clean "to be added" block
 
 **7. Action Zone**
+
 - Sticky footer: primary "Approve & Write Code" (glowing green), secondary ghost "Reject"
 - Clicking either calls `submit_approval` directly (Section 12) — no intermediate REST call in the primary path
 - Loading → success checkmark transition, toast confirming the file written
@@ -889,7 +896,9 @@ interface PolicyCheck {
 Four tracks, designed to run in parallel from minute 45 onward. **The central change from the original plan: Track A no longer owns "the MCP server" — it owns the AI Layer.** The MCP server is just where Track A's tool-invocation decisions land; the actual deliverable is the reasoning workflow.
 
 ### 🟦 Track A — AI Layer (1 person)
+
 **Owns:** `agents/*.md` (prompt specs for all six logical stages), `schemas/state.schema.json`, `contracts/tool-contracts.md`, `mcp-server/src/index.ts` tool registration, the poll-based approval mechanic
+
 - **Agent Architecture:** design and document the six logical stages (Section 5) and how they hand off through Shared Agent State (Section 6)
 - **Reasoning Workflow:** implement the loop in Section 7 — this is the actual system prompt, not a wrapper around tool calls
 - **Prompt Design:** write `planner.md` through `coordinator.md` (Section 14), example-heavy, tight output schemas
@@ -899,21 +908,27 @@ Four tracks, designed to run in parallel from minute 45 onward. **The central ch
 - **Integration & Coordination with backend:** this person is the glue between B, C, and D — test the *end-to-end reasoning trace* with a scripted prompt early, since this is the piece most likely to have surprising failure modes
 
 ### 🟩 Track B — Pricing & Candidate Generation (backend implementation) (1 person)
+
 **Owns:** `tools/pricingClient.ts`, `tools/resourceEstimator.ts`, `tools/candidateGenerator.ts`, `knowledge-base/pricing.json`, `knowledge-base/compute-catalog.json`
+
 - Build the static knowledge base: pricing + compliance tags for the MVP catalog only (3 compute × 2 database × cache toggle × 2 scaling × ~5 instance types — Section 9)
 - Implement `estimate_resource_requirements` and `generate_candidate_architectures` exactly to the schemas in Section 12 — no tradeoff reasoning belongs in either function, just data generation
 - Compute the `breakdown` object (compute/storage/egress/other split) per candidate
 - Hand Track A a clean function signature so it slots directly into the Agent Runtime's tool calls
 
 ### 🟨 Track C — Policy Engine, Scoring & Terraform Writer (backend implementation) (1 person)
+
 **Owns:** `tools/policyReader.ts`, `tools/architectureComparator.ts`, `tools/terraformGenerator.ts`, `policy.yaml`, `sample-project/main.tf`
+
 - Write `policy.yaml` with 3–5 rules relevant to the demo story (budget compliance, ARM preference, auto-scaling requirement, etc.)
 - Implement `compare_architectures` as a **pure, deterministic scoring function** (Section 12) — hard budget/SLA checks, policy pass rate, relative cost rank. **It must not choose a recommendation or write a rejection narrative — that's the Coordinator's job (Track A), not this tool's.**
 - Implement `generate_terraform` and `write_approved_changes` using a clearly marked block (`# SHIFT-LEFT-FINOPS: managed block start/end`) so writes are idempotent
 - Build `sample-project/` — a believable existing Terraform repo the live demo modifies
 
 ### 🟪 Track D — React Dashboard (1 person, pulls in help from whoever finishes early)
+
 **Owns:** entire `dashboard/` app
+
 - Scaffold the widget with Tailwind and the design tokens from Section 19
 - Build all 7 components: Recommended Architecture Card, Why Panel, Alternatives Table, Resource Breakdown Chart, Policy Badges, Terraform Diff, Action Zone
 - Build `useAnalysisSocket` (fallback path) and `useCountUp`
@@ -921,6 +936,7 @@ Four tracks, designed to run in parallel from minute 45 onward. **The central ch
 - Build against a hardcoded mock `InfrastructureAnalysis` JSON (matching Section 18 exactly) for the first several hours — do not wait on live data from A/B/C
 
 ### Cross-cutting
+
 - **Everyone** agrees on the `InfrastructureAnalysis` schema (Section 18) and the `state.schema.json` shape (Section 6) in the first 30–45 minutes before splitting off.
 - Track D commits `mocks/sampleAnalysis.json` early so Track A can point the Agent Runtime's `present_analysis` call at it for the first integration test.
 - **The ownership boundary that used to drift, now settled:** "compare and explain" is split by design — `compare_architectures` (Track C) is deterministic scoring only; the recommendation, the confidence score, and the rejection narrative are Coordinator reasoning (Track A). This isn't a mid-build sync point anymore, it's decided in Section 12 — don't relitigate it.

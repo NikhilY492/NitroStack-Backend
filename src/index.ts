@@ -1,11 +1,12 @@
+process.env.NITROSTACK_APP_MODE = 'openai'; // Lock to OpenAI Apps SDK mode
 import 'reflect-metadata';
 import { McpApplicationFactory } from '@nitrostack/core';
-import { AppModule } from './app.module';
+import { Application } from './app.module';
 
 async function bootstrap() {
-  const app = await McpApplicationFactory.create(AppModule);
+  const app = await McpApplicationFactory.create(Application);
 
-  await app.listen();
+  await app.start();
 }
 
 bootstrap().catch(console.error);

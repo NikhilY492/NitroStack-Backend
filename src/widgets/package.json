@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@nitrostack/widgets": "latest",
+    "@nitrostack/widgets": "^1.0.8",
     "next": "14.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
