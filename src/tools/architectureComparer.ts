@@ -3,7 +3,6 @@ import {
   CompareArchitecturesOutput,
   CandidateScore,
   ArchitectureCandidate,
-  PolicyResultsMap,
 } from '../types/state';
 
 /**
